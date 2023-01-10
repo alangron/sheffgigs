@@ -1,6 +1,9 @@
 import pandas as pd
+import os
+import time
 import urllib.request
 import bs4 as bs
+import webbrowser
 
 # 1. Sheffield Gigs (Automated)
 # Open the url
@@ -15,12 +18,16 @@ gigs['Date'] = gigs['Date'].str[:10]
 gigs['artist'] = gigs['artist'].str.lower()
 
 
-# 2. Pitchfork Reviews (Requires manual download)
+# 2. Pitchfork Reviews
 # Taken from here https://www.lamorbidamacchina.com/pitchforkscores/export.php
-pitchfork = pd.read_csv('C:/Users/Administrator/Documents/GitHub/sheffgigs/Data/pitchfork-scores-export.csv',sep=';')[['score','author','title']]
+os.remove('Downloads/pitchfork-scores-export.csv')
+webbrowser.open('https://www.lamorbidamacchina.com/pitchforkscores/export.php')
+time.sleep(10)
+pitchfork = pd.read_csv('Downloads/pitchfork-scores-export.csv',sep=';')[['score','author','title']]
 pitchfork = pitchfork.rename(columns={"author": "artist", "title": "album"})
 
-df_hist = pd.read_csv('C:/Users/Administrator/Documents/GitHub/sheffgigs/Data/pitchfork.csv')[['artist','album','score']]
+# Taken from here https://www.dropbox.com/s/cqf7cgxh91eoeyn/pitchfork.csv?dl=0
+df_hist = pd.read_csv('Documents/GitHub/sheffgigs/Data/pitchfork.csv')[['artist','album','score']]
 
 pitchfork = pitchfork.append(df_hist)
 
@@ -35,7 +42,7 @@ pitchfork = pitchfork.drop_duplicates()
 
 # 3. Theneedledrop Reviews (Required manual download. Could be automated with Kaggle API)
 # TND Data from https://www.kaggle.com/datasets/josephgreen/anthony-fantano-album-review-dataset/code?select=albums.csv
-tnd = pd.read_csv('C:/Users/Administrator/Documents/GitHub/sheffgigs/Data/albums.csv')[['project_name','artist','rating']]
+tnd = pd.read_csv('Documents/GitHub/sheffgigs/Data/albums.csv')[['project_name','artist','rating']]
 tnd = tnd.rename(columns={"rating": "TND-score", "project_name": "album"})
 tnd['mergekey'] = tnd['artist']+tnd['album']
 tnd = tnd.sort_values(by=['mergekey'], ascending=False)
