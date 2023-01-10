@@ -4,6 +4,9 @@ import time
 import urllib.request
 import bs4 as bs
 import webbrowser
+from kaggle.api.kaggle_api_extended import KaggleApi
+import zipfile
+
 
 # 1. Sheffield Gigs (Automated)
 # Open the url
@@ -16,7 +19,6 @@ gigs = pd.read_html(str(table))[0][['Date','Event Title','Venue']]
 gigs = gigs.rename(columns={"Event Title": "artist"})
 gigs['Date'] = gigs['Date'].str[:10]
 gigs['artist'] = gigs['artist'].str.lower()
-
 
 # 2. Pitchfork Reviews
 # Taken from here https://www.lamorbidamacchina.com/pitchforkscores/export.php
@@ -40,8 +42,17 @@ pitchfork = pitchfork.sort_values(by=['mergekey'], ascending=False)
 pitchfork = pitchfork.drop_duplicates()
 
 
-# 3. Theneedledrop Reviews (Required manual download. Could be automated with Kaggle API)
+# 3. Theneedledrop Reviews
 # TND Data from https://www.kaggle.com/datasets/josephgreen/anthony-fantano-album-review-dataset/code?select=albums.csv
+# Authenticate kaggle api
+api = KaggleApi()
+api.authenticate()
+
+# Download and upzip the kaggle file
+api.dataset_download_files('josephgreen/anthony-fantano-album-review-dataset', path='Documents/GitHub/sheffgigs/Data')
+with zipfile.ZipFile('Documents/GitHub/sheffgigs/Data/anthony-fantano-album-review-dataset.zip', 'r') as zipref:
+    zipref.extractall('Documents/GitHub/sheffgigs/Data')
+
 tnd = pd.read_csv('Documents/GitHub/sheffgigs/Data/albums.csv')[['project_name','artist','rating']]
 tnd = tnd.rename(columns={"rating": "TND-score", "project_name": "album"})
 tnd['mergekey'] = tnd['artist']+tnd['album']
@@ -58,8 +69,6 @@ reviews = pd.merge(reviews, tnd, on='mergekey', how='left')
 reviews['artist'] = reviews.artist_x.combine_first(reviews.artist_y)
 reviews['album'] = reviews.album_x.combine_first(reviews.album_y)
 reviews = reviews[['artist','album','pitchfork-score','TND-score']]
-
-
 
 # Merge the reviews to the gigs
 df = pd.merge(gigs, reviews, on='artist', how='inner')
