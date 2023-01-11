@@ -6,6 +6,10 @@ import bs4 as bs
 import webbrowser
 from kaggle.api.kaggle_api_extended import KaggleApi
 import zipfile
+import requests
+import requests_cache
+import lastfmcreds
+requests_cache.install_cache()
 
 
 # 1. Sheffield Gigs (Automated)
@@ -20,8 +24,72 @@ gigs = gigs.rename(columns={"Event Title": "artist"})
 gigs['Date'] = gigs['Date'].str[:10]
 gigs['artist'] = gigs['artist'].str.lower()
 
-# 2. Pitchfork Reviews
-# Taken from here https://www.lamorbidamacchina.com/pitchforkscores/export.php
+
+# 2. Last fm plays
+
+def lastfm_get(payload):
+    # define headers and URL
+    headers = {'user-agent': lastfmcreds.USER_AGENT}
+    url = 'https://ws.audioscrobbler.com/2.0/'
+
+    # Add API key and format to the payload
+    payload['api_key'] = lastfmcreds.API_KEY
+    payload['format'] = 'json'
+    payload['user'] = lastfmcreds.USER_AGENT
+
+    response = requests.get(url, headers=headers, params=payload)
+    return response
+
+responses = []
+page = 1
+total_pages = 99999 # this is just a dummy number so the loop starts
+
+while page <= total_pages:
+    payload = {
+        'method': 'user.gettopartists',
+        'limit': 500,
+        'page': page
+    }
+
+    # print some output so we can see the status
+    print("Requesting page {}/{}".format(page, total_pages))
+
+    # make the API call
+    response = lastfm_get(payload)
+
+    # if we get an error, print the response and halt the loop
+    if response.status_code != 200:
+        print(response.text)
+        break
+
+    # extract pagination info
+    page = int(response.json()['topartists']['@attr']['page'])
+    total_pages = int(response.json()['topartists']['@attr']['totalPages'])
+
+    # append response
+    responses.append(response)
+
+    # if it's not a cached result, sleep
+    if not getattr(response, 'from_cache', False):
+        time.sleep(0.25)
+
+    # increment the page number
+    page += 1
+    
+# Concat the data and move to dataframe
+frames = [pd.DataFrame(r.json()['topartists']['artist']) for r in responses]
+lastfm = pd.concat(frames)
+lastfm = lastfm[['name','playcount']]
+lastfm['playcount'] = lastfm['playcount'].astype(int)
+lastfm = lastfm.rename(columns={"name": "artist", "playcount": "lastfm_playcount"})
+lastfm['artist'] = lastfm['artist'].str.lower()
+
+
+# Merge play count to the gigs
+gigs = pd.merge(gigs, lastfm, on='artist', how='left')
+
+
+# 3. Pitchfork Reviews
 os.remove('Downloads/pitchfork-scores-export.csv')
 webbrowser.open('https://www.lamorbidamacchina.com/pitchforkscores/export.php')
 time.sleep(10)
@@ -42,8 +110,7 @@ pitchfork = pitchfork.sort_values(by=['mergekey'], ascending=False)
 pitchfork = pitchfork.drop_duplicates()
 
 
-# 3. Theneedledrop Reviews
-# TND Data from https://www.kaggle.com/datasets/josephgreen/anthony-fantano-album-review-dataset/code?select=albums.csv
+# 4. Theneedledrop Reviews
 # Authenticate kaggle api
 api = KaggleApi()
 api.authenticate()
@@ -60,7 +127,8 @@ tnd = tnd.sort_values(by=['mergekey'], ascending=False)
 tnd = tnd.drop_duplicates()
 
 
-# 4 Combine pitchfork and TND reviews
+
+# 5 Combine pitchfork, TND reviews and last fm plays
 index = pitchfork.append(tnd)['mergekey'].sort_values().drop_duplicates()
 
 reviews = pd.merge(index, pitchfork, on='mergekey', how='left')
@@ -71,4 +139,8 @@ reviews['album'] = reviews.album_x.combine_first(reviews.album_y)
 reviews = reviews[['artist','album','pitchfork-score','TND-score']]
 
 # Merge the reviews to the gigs
-df = pd.merge(gigs, reviews, on='artist', how='inner')
+df = pd.merge(gigs, reviews, on='artist', how='left')
+
+df = df[df['lastfm_playcount'].notna() | df['pitchfork-score'].notna() | df['TND-score'].notna()]
+
+
