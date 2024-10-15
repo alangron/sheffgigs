@@ -7,12 +7,12 @@ import webbrowser
 from kaggle.api.kaggle_api_extended import KaggleApi
 import zipfile
 import requests
-import requests_cache
+# import requests_cache
 import lastfmcreds
-requests_cache.install_cache()
+# requests_cache.install_cache()
 
 
-# 1. Sheffield Gigs (Automated)
+# 1. Sheffield Gigs 
 # Open the url
 source = urllib.request.urlopen('https://www.sheffieldmusicscene.co.uk/w_city_by_date_Sheffield.html').read()
 soup = bs.BeautifulSoup(source,'lxml')
@@ -26,7 +26,6 @@ gigs['artist'] = gigs['artist'].str.lower()
 
 
 # 2. Last fm plays
-
 def lastfm_get(payload):
     # define headers and URL
     headers = {'user-agent': lastfmcreds.USER_AGENT}
@@ -52,7 +51,7 @@ while page <= total_pages:
     }
 
     # print some output so we can see the status
-    print("Requesting page {}/{}".format(page, total_pages))
+    print("Requesting last fm page {}/{}".format(page, total_pages))
 
     # make the API call
     response = lastfm_get(payload)
@@ -111,21 +110,22 @@ pitchfork = pitchfork.drop_duplicates()
 
 
 # 4. Theneedledrop Reviews
-# Authenticate kaggle api
+# Authenticate kaggle api 
 api = KaggleApi()
 api.authenticate()
 
 # Download and upzip the kaggle file
-api.dataset_download_files('josephgreen/anthony-fantano-album-review-dataset', path='Documents/GitHub/sheffgigs/Data')
-with zipfile.ZipFile('Documents/GitHub/sheffgigs/Data/anthony-fantano-album-review-dataset.zip', 'r') as zipref:
-    zipref.extractall('Documents/GitHub/sheffgigs/Data')
+api.dataset_download_files('borgesborges/theneedledrops-reviews', path='Documents/Data')
+with zipfile.ZipFile('Documents/Data/theneedledrops-reviews.zip', 'r') as zipref:
+    zipref.extractall('Documents/Data')
 
-tnd = pd.read_csv('Documents/GitHub/sheffgigs/Data/albums.csv')[['project_name','artist','rating']]
-tnd = tnd.rename(columns={"rating": "TND-score", "project_name": "album"})
+tnd = pd.read_json('Documents/Data/fantanodataset/theneedledrop.json')[['artist','title','score']]
+tnd = tnd.rename(columns={"score": "TND-score","title":"album"})
+tnd['artist'] = tnd['artist'].str.lower()
+tnd['album'] = tnd['album'].str.lower()
 tnd['mergekey'] = tnd['artist']+tnd['album']
 tnd = tnd.sort_values(by=['mergekey'], ascending=False)
 tnd = tnd.drop_duplicates()
-
 
 
 # 5 Combine pitchfork, TND reviews and last fm plays
